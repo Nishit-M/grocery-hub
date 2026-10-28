@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Grocery Hub</title>
   <meta name="description" content="Shared monthly grocery list for the household.">
-  <meta name="theme-color" content="#f7f7f5">
+  <meta name="theme-color" content="#0c0f14">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="styles.css">
   <script>
     // Apply the saved theme before first paint to avoid a flash.
-    try { var t = JSON.parse(localStorage.getItem('gh.theme') || '"system"'); if (t !== 'system') document.documentElement.dataset.theme = t; } catch (e) {}
+    try { var t = JSON.parse(localStorage.getItem('gh.theme') || '"dark"'); if (t !== 'system') document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
   <script src="config.js"></script>
   <script type="module" src="app.js"></script>
