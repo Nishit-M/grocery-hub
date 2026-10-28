@@ -25,6 +25,14 @@ const CATEGORIES = [
   'Sauces & Pickles', 'Bakery', 'Meat / Fish / Eggs', 'Frozen', 'Pooja Items',
   'Personal Care', 'Household Cleaning', 'Kitchen & Disposables'
 ];
+const CAT_ICONS = {
+  'Vegetables': '🥕', 'Fruits': '🍎', 'Dairy': '🥛', 'Grains & Pulses': '🌾', 'Spices & Masala': '🌶️',
+  'Oils & Ghee': '🫒', 'Sugar & Salt': '🧂', 'Dry Fruits & Nuts': '🥜', 'Snacks & Beverages': '🍪',
+  'Instant & Ready Foods': '🍜', 'Sauces & Pickles': '🫙', 'Bakery': '🍞', 'Meat / Fish / Eggs': '🥚',
+  'Frozen': '🧊', 'Pooja Items': '🪔', 'Personal Care': '🧴', 'Household Cleaning': '🧽',
+  'Kitchen & Disposables': '🍽️', 'Other': '🛒'
+};
+const catTile = cat => CAT_ICONS[cat] ? `<span class="cat-ic" aria-hidden="true">${CAT_ICONS[cat]}</span>` : '';
 const UNITS = ['kg', 'g', 'L', 'ml', 'pcs', 'pack', 'dozen', 'bunch', 'bottle', 'box'];
 const STORES = [
   'Reliance Smart', 'More', 'National Mart', 'Ushodaya', 'Local Kirana', 'Vegetable Market',
@@ -559,16 +567,17 @@ function render() {
 
 function groupHTML(id, title, count, inner, extra = '') {
   const open = !S.collapsed.has(id);
-  return `<details class="group" data-group="${esc(id)}" ${open ? 'open' : ''}>
-    <summary><h3>${esc(title)}</h3>${extra}<span class="count">${count}</span></summary>
+  const tile = catTile(title);
+  return `<details class="group${tile ? ' has-ic' : ''}" data-group="${esc(id)}" ${open ? 'open' : ''}>
+    <summary>${tile}<h3>${esc(title)}</h3>${extra}<span class="count">${count}</span></summary>
     <ul class="rows">${inner}</ul></details>`;
 }
 
 // Collapsible category for long staple lists: only one open at a time (see the 'toggle' listener).
 function accordionHTML(acc, cat, rows, rowHTML) {
   const onCount = rows.filter(st => activeUnbought(nameKey(st.name))).length;
-  return `<details class="group acc" data-acc="${acc}" data-cat="${esc(cat)}" ${openCat[acc] === cat ? 'open' : ''}>
-    <summary><h3>${esc(cat)}</h3>${onCount ? `<span class="on-count">${onCount} on list</span>` : ''}<span class="count">${rows.length}</span></summary>
+  return `<details class="group acc has-ic" data-acc="${acc}" data-cat="${esc(cat)}" ${openCat[acc] === cat ? 'open' : ''}>
+    <summary>${catTile(cat)}<h3>${esc(cat)}</h3>${onCount ? `<span class="on-count">${onCount} on list</span>` : ''}<span class="count">${rows.length}</span></summary>
     <ul class="rows">${typeof rowHTML === 'string' ? rowHTML : rows.map(rowHTML).join('')}</ul></details>`;
 }
 
@@ -870,6 +879,24 @@ function updateStatus() {
 /* ------------------------------------------------------------------ toast & snackbar */
 let toastTimer = null;
 let snackUndo = null;
+// Open sheets/menus are modal: everything outside them is drawn underneath and can't be tapped.
+// So the toast lives inside the top-most open dialog (or <body>), and is shown as a popover so it
+// is drawn above everything.
+function placeToast() {
+  const el = $('#toast');
+  if (el.hidden) return;
+  const host = [...document.querySelectorAll('dialog[open]')].pop() || document.body;
+  if (el.parentElement !== host) host.appendChild(el);
+  if (el.showPopover) { try { if (el.matches(':popover-open')) el.hidePopover(); el.showPopover(); } catch (e) {} }
+}
+['#sheet', '#confirm', '#drawer'].forEach(sel => $(sel).addEventListener('close', () => {
+  if ($(sel).contains($('#toast'))) requestAnimationFrame(placeToast);
+}));
+function hideToast() {
+  const el = $('#toast');
+  el.hidden = true; snackUndo = null;
+  if (el.hidePopover) { try { el.hidePopover(); } catch (e) {} }
+}
 function toast(msg, { error = false, undo = null, ms = 4000 } = {}) {
   const el = $('#toast');
   clearTimeout(toastTimer);
@@ -877,7 +904,8 @@ function toast(msg, { error = false, undo = null, ms = 4000 } = {}) {
   el.className = 'toast' + (error ? ' error' : '');
   el.innerHTML = `<span class="msg">${esc(msg)}</span>${undo ? '<button type="button" data-act="undo">Undo</button>' : ''}<button type="button" data-act="closeToast" aria-label="Dismiss message">✕</button>`;
   el.hidden = false;
-  toastTimer = setTimeout(() => { el.hidden = true; snackUndo = null; }, ms);
+  placeToast();
+  toastTimer = setTimeout(() => hideToast(), ms);
 }
 const snack = (msg, undo) => toast(msg, { undo, ms: 5000 });
 
@@ -991,6 +1019,20 @@ function openPicker(query = '') {
   pickerQuery = query;
   renderPicker();
 }
+function pickerQty(st, dir) {
+  const r = activeUnbought(nameKey(st.name));
+  if (!r) return;
+  const step = stepFor(r.unit);
+  if (dir < 0 && r.qty <= step) { removeItem(r); renderPicker(); return; }
+  let next = Math.round((r.qty + dir * step) / step) * step;
+  if (dir > 0 && next <= r.qty) next = r.qty + step;
+  if (dir < 0 && next >= r.qty) next = r.qty - step;
+  next = Math.round(next * 1000) / 1000;
+  if (!(next > 0)) { removeItem(r); renderPicker(); return; }
+  r.qty = next;            // show the change instantly; the snapshot confirms it
+  updateItem(r, { qty: next });
+  renderPicker();
+}
 function renderPicker() {
   const box = $('#pickerList');
   if (pickerQuery == null || !box) return;
@@ -1000,7 +1042,8 @@ function renderPicker() {
   const hits = active.filter(s => !q || nameKey(s.name).includes(q) || nameKey(s.category).includes(q));
   const exact = active.some(s => nameKey(s.name) === q);
   const plus = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
-  const tick = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  const minus = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>';
+  const trash = '<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 002 2h6a2 2 0 002-2l1-12M9 7V4h6v3"/></svg>';
   let html = '';
   if (!exact) {
     const label = raw ? `Add “${esc(cleanName(raw))}” as new item` : 'New item (not in Staples)';
@@ -1011,18 +1054,28 @@ function renderPicker() {
   }
   const pickRow = st => {
     const on = activeUnbought(nameKey(st.name));
-    return `<li class="row${on ? ' on' : ''}">
-      <button type="button" class="row-main" data-act="${on ? 'pickRemove' : 'pickAdd'}" data-sid="${esc(st.id)}"
-        aria-label="${on ? esc(st.name) + ' is on the list, tap to remove' : 'Add ' + esc(st.name) + ', ' + esc(qtyLabel(st.qty, st.unit))}">
+    if (on) {
+      return `<li class="row on">
+        <div class="row-main static"><span class="name">${esc(st.name)}</span><span class="meta">On list</span></div>
+        <div class="mini-step" role="group" aria-label="Quantity of ${esc(st.name)}">
+          <button type="button" data-act="pickQty" data-dir="-1" data-sid="${esc(st.id)}" aria-label="${on.qty <= stepFor(on.unit) ? 'Remove ' + esc(st.name) + ' from the list' : 'Less ' + esc(st.name)}">${on.qty <= stepFor(on.unit) ? trash : minus}</button>
+          <span class="mini-qty" aria-live="polite">${esc(qtyLabel(on.qty, on.unit))}</span>
+          <button type="button" data-act="pickQty" data-dir="1" data-sid="${esc(st.id)}" aria-label="More ${esc(st.name)}">${plus}</button>
+        </div>
+      </li>`;
+    }
+    return `<li class="row">
+      <button type="button" class="row-main" data-act="pickAdd" data-sid="${esc(st.id)}"
+        aria-label="Add ${esc(st.name)}, ${esc(qtyLabel(st.qty, st.unit))}">
         <span class="name">${esc(st.name)}</span>
-        <span class="meta">${on ? 'On list · ' + esc(qtyLabel(on.qty, on.unit)) : esc(qtyLabel(st.qty, st.unit))}</span>
+        <span class="meta">${esc(qtyLabel(st.qty, st.unit))}</span>
       </button>
-      <span class="pick-ic${on ? ' on' : ''}" aria-hidden="true">${on ? tick : plus}</span>
+      <span class="pick-ic" aria-hidden="true">${plus}</span>
     </li>`;
   };
   for (const [cat, rows] of groupByCategory(hits)) {
     html += q
-      ? `<div class="picker-cat">${esc(cat)}</div><ul class="rows picker-group">${rows.map(pickRow).join('')}</ul>`
+      ? `<div class="picker-cat">${catTile(cat)}${esc(cat)}</div><ul class="rows picker-group">${rows.map(pickRow).join('')}</ul>`
       : accordionHTML('picker', cat, rows, pickRow);
   }
   box.innerHTML = html;
@@ -1219,7 +1272,7 @@ document.addEventListener('click', e => {
     case 'openPicker': openPicker(); break;
     case 'pickNew': openAddSheet(cleanName(pickerQuery || ''), { fromPicker: true }); break;
     case 'pickAdd': if (st) { addStapleToList(st); renderPicker(); } break;
-    case 'pickRemove': if (st) { const r = activeUnbought(nameKey(st.name)); if (r) { removeItem(r); renderPicker(); } } break;
+    case 'pickQty': if (st) { pickerQty(st, Number(el.dataset.dir)); } break;
     case 'closeSheet': closeSheet(); break;
     case 'edit': if (row) openEditSheet(row); break;
     case 'editCart': if (row) openCartSheet(row); break;
@@ -1241,8 +1294,8 @@ document.addEventListener('click', e => {
     case 'install': doInstall(); break;
     case 'dismissInstall': local.set('installDismissed', true); updateStatus(); break;
     case 'applyUpdate': applyUpdate(); break;
-    case 'undo': { const fn = snackUndo; snackUndo = null; $('#toast').hidden = true; if (fn) fn(); break; }
-    case 'closeToast': $('#toast').hidden = true; snackUndo = null; break;
+    case 'undo': { const fn = snackUndo; hideToast(); if (fn) { fn(); renderPicker(); } break; }
+    case 'closeToast': hideToast(); break;
     case 'confirmYes': closeConfirm(true); break;
     case 'confirmNo': closeConfirm(false); break;
   }
