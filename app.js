@@ -564,6 +564,14 @@ function groupHTML(id, title, count, inner, extra = '') {
     <ul class="rows">${inner}</ul></details>`;
 }
 
+// Collapsible category for long staple lists: only one open at a time (see the 'toggle' listener).
+function accordionHTML(acc, cat, rows, rowHTML) {
+  const onCount = rows.filter(st => activeUnbought(nameKey(st.name))).length;
+  return `<details class="group acc" data-acc="${acc}" data-cat="${esc(cat)}" ${openCat[acc] === cat ? 'open' : ''}>
+    <summary><h3>${esc(cat)}</h3>${onCount ? `<span class="on-count">${onCount} on list</span>` : ''}<span class="count">${rows.length}</span></summary>
+    <ul class="rows">${typeof rowHTML === 'string' ? rowHTML : rows.map(rowHTML).join('')}</ul></details>`;
+}
+
 function renderList() {
   const t = totals();
   const budget = S.control.budget;
@@ -656,8 +664,8 @@ function renderStaples() {
           : `<button type="button" class="icon-btn ok" data-act="addStaple" data-sid="${esc(s.id)}" aria-label="Add ${esc(s.name)} to the list"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>`}
       </li>`;
     }).join('');
-    // While searching, every matching group is shown open ("search:" ids are never stored as collapsed).
-    html += groupHTML((q ? 'search:' : 'st:') + cat, cat, rows.length, inner);
+    // While searching, every matching group is shown open; otherwise categories form an accordion.
+    html += q ? groupHTML('search:' + cat, cat, rows.length, inner) : accordionHTML('staples', cat, rows, inner);
   }
   $('#staplesBody').innerHTML = html;
 }
@@ -891,6 +899,7 @@ $('#confirm').addEventListener('cancel', () => { if (confirmResolve) { confirmRe
 /* ------------------------------------------------------------------ bottom sheet */
 let sheetSubmit = null;
 let pickerQuery = null;   // non-null while the "Add items" picker is showing
+const openCat = { picker: null, staples: null };   // one open category per accordion
 function openSheet(title, bodyHTML, onSubmit, focusSel, { tall = false } = {}) {
   pickerQuery = null;
   $('#sheet').classList.toggle('tall', tall);
@@ -978,6 +987,7 @@ function openPicker(query = '') {
       <button class="btn primary block big" type="button" data-act="closeSheet">Done</button>
     </div>`;
   openSheet('Add items', body, () => {}, null, { tall: true });
+  if (!query) openCat.picker = null;
   pickerQuery = query;
   renderPicker();
 }
@@ -999,18 +1009,21 @@ function renderPicker() {
   if (!hits.length) {
     html += `<div class="empty">${active.length ? `No staples match “${esc(raw)}”.` : 'No staples yet.'}</div>`;
   }
+  const pickRow = st => {
+    const on = activeUnbought(nameKey(st.name));
+    return `<li class="row${on ? ' on' : ''}">
+      <button type="button" class="row-main" data-act="${on ? 'pickRemove' : 'pickAdd'}" data-sid="${esc(st.id)}"
+        aria-label="${on ? esc(st.name) + ' is on the list, tap to remove' : 'Add ' + esc(st.name) + ', ' + esc(qtyLabel(st.qty, st.unit))}">
+        <span class="name">${esc(st.name)}</span>
+        <span class="meta">${on ? 'On list · ' + esc(qtyLabel(on.qty, on.unit)) : esc(qtyLabel(st.qty, st.unit))}</span>
+      </button>
+      <span class="pick-ic${on ? ' on' : ''}" aria-hidden="true">${on ? tick : plus}</span>
+    </li>`;
+  };
   for (const [cat, rows] of groupByCategory(hits)) {
-    html += `<div class="picker-cat">${esc(cat)}</div><ul class="rows picker-group">` + rows.map(st => {
-      const on = activeUnbought(nameKey(st.name));
-      return `<li class="row${on ? ' on' : ''}">
-        <button type="button" class="row-main" data-act="${on ? 'pickRemove' : 'pickAdd'}" data-sid="${esc(st.id)}"
-          aria-label="${on ? esc(st.name) + ' is on the list, tap to remove' : 'Add ' + esc(st.name) + ', ' + esc(qtyLabel(st.qty, st.unit))}">
-          <span class="name">${esc(st.name)}</span>
-          <span class="meta">${on ? 'On list · ' + esc(qtyLabel(on.qty, on.unit)) : esc(qtyLabel(st.qty, st.unit))}</span>
-        </button>
-        <span class="pick-ic${on ? ' on' : ''}" aria-hidden="true">${on ? tick : plus}</span>
-      </li>`;
-    }).join('') + '</ul>';
+    html += q
+      ? `<div class="picker-cat">${esc(cat)}</div><ul class="rows picker-group">${rows.map(pickRow).join('')}</ul>`
+      : accordionHTML('picker', cat, rows, pickRow);
   }
   box.innerHTML = html;
 }
@@ -1269,6 +1282,15 @@ document.addEventListener('submit', e => {
 // Remember which category groups are collapsed.
 document.addEventListener('toggle', e => {
   const d = e.target;
+  if (d instanceof HTMLDetailsElement && d.dataset.acc) {
+    const acc = d.dataset.acc, cat = d.dataset.cat;
+    if (d.open) {
+      openCat[acc] = cat;
+      document.querySelectorAll(`details[data-acc="${acc}"][open]`).forEach(o => { if (o !== d) o.open = false; });
+      requestAnimationFrame(() => d.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    } else if (openCat[acc] === cat) openCat[acc] = null;
+    return;
+  }
   if (!(d instanceof HTMLDetailsElement) || !d.dataset.group || d.dataset.group.startsWith('search:')) return;
   if (d.open) S.collapsed.delete(d.dataset.group); else S.collapsed.add(d.dataset.group);
   local.set('collapsed', [...S.collapsed]);

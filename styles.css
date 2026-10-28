@@ -460,6 +460,18 @@ dialog { color: var(--text); }
 .pick-ic.on { background: var(--ok); color: #fff; box-shadow: none; }
 .picker > .btn { flex: none; }
 
+/* ─── Category accordion (picker + Staples) ─── */
+.group.acc { margin-bottom: 8px; overflow: clip; scroll-margin-top: calc(env(safe-area-inset-top) + 107px); }
+/* keep the open category's header pinned so it can be collapsed from anywhere */
+.group.acc[open] > summary { position: sticky; z-index: 2; background: var(--surface); top: calc(env(safe-area-inset-top) + 107px); }
+.picker-list .group.acc[open] > summary { top: 0; }
+.picker-list .group.acc { scroll-margin-top: 0; }
+.group.acc > summary { min-height: 50px; }
+.on-count { font-size: .75rem; font-weight: 600; color: var(--ok); background: var(--ok-soft); padding: 2px 8px; border-radius: 980px; white-space: nowrap; }
+.picker-list .group.acc .row { padding-right: 14px; min-height: 50px; }
+.picker-list .group.acc .row.on .meta { color: var(--ok); }
+.picker-new { margin-bottom: 14px; }
+
 /* ─── Switch (iOS style) ─── */
 .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   background: var(--surface); border-radius: 10px; padding: 8px 12px; min-height: 48px; }
