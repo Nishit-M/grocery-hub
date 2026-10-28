@@ -550,6 +550,7 @@ function render() {
   $('#memberChip').setAttribute('aria-label', `${S.me.name} — Settings`);
   updateStatus();
   if (!ready) return;
+  renderPicker();
   if (S.tab === 'list') renderList();
   else if (S.tab === 'staples') renderStaples();
   else if (S.tab === 'history') renderHistory();
@@ -889,7 +890,10 @@ $('#confirm').addEventListener('cancel', () => { if (confirmResolve) { confirmRe
 
 /* ------------------------------------------------------------------ bottom sheet */
 let sheetSubmit = null;
-function openSheet(title, bodyHTML, onSubmit, focusSel) {
+let pickerQuery = null;   // non-null while the "Add items" picker is showing
+function openSheet(title, bodyHTML, onSubmit, focusSel, { tall = false } = {}) {
+  pickerQuery = null;
+  $('#sheet').classList.toggle('tall', tall);
   $('#sheetTitle').textContent = title;
   $('#sheetBody').innerHTML = bodyHTML;
   sheetSubmit = onSubmit;
@@ -898,12 +902,13 @@ function openSheet(title, bodyHTML, onSubmit, focusSel) {
   const f = focusSel ? $(focusSel, dlg) : null;
   if (f) setTimeout(() => f.focus(), 30);
 }
-function closeSheet() { const d = $('#sheet'); if (d.open) d.close(); sheetSubmit = null; }
+function closeSheet() { const d = $('#sheet'); if (d.open) d.close(); sheetSubmit = null; pickerQuery = null; }
 $('#sheetForm').addEventListener('submit', e => {
   e.preventDefault();
   if (sheetSubmit) sheetSubmit(new FormData(e.target), e.submitter);
 });
 $('#sheet').addEventListener('click', e => { if (e.target === e.currentTarget) closeSheet(); }); // tap on backdrop
+$('#sheet').addEventListener('close', () => { pickerQuery = null; });
 $('#drawer').addEventListener('click', e => { if (e.target === e.currentTarget) closeMenu(); }); // tap outside the menu
 $('#drawer').addEventListener('close', () => { $('#menuBtn').setAttribute('aria-expanded', 'false'); });
 
@@ -929,7 +934,7 @@ function readQty(fd) {
 }
 
 /* Add item */
-function openAddSheet(prefill = '') {
+function openAddSheet(prefill = '', { fromPicker = false } = {}) {
   const body = `
     <div class="field"><label for="f-name">Item</label>
       <input id="f-name" name="name" type="text" autocomplete="off" autocapitalize="words" enterkeyhint="next" value="${esc(prefill)}" required
@@ -940,19 +945,74 @@ function openAddSheet(prefill = '') {
     <div class="field"><label for="f-cat">Category</label>
       <select id="f-cat" name="category" required>${optionList(CATEGORIES, '', 'Choose a category…')}</select></div>
     ${qtyFields(1, 'pcs')}
-    <button class="btn primary block big" type="submit">Add to list</button>`;
-  openSheet('Add item', body, fd => {
+    <div class="field switch-row" id="saveStapleRow">
+      <label for="f-savestaple">Also save to Staples</label>
+      <input id="f-savestaple" name="saveStaple" type="checkbox" class="switch" role="switch" checked>
+    </div>
+    <button class="btn primary block big" type="submit">Add to list</button>
+    ${fromPicker ? '<button class="btn block" type="button" data-act="openPicker" style="margin-top:8px">Back to staples</button>' : ''}`;
+  openSheet('New item', body, fd => {
     const name = cleanName(fd.get('name'));
     const category = fd.get('category');
     if (!name) { toast('Type an item name.', { error: true }); $('#f-name').focus(); return; }
     if (!category) { toast('Choose a category.', { error: true }); $('#f-cat').focus(); return; }
     const qty = readQty(fd); if (qty == null) return;
-    const res = addItem({ name, category, qty, unit: fd.get('unit') });
+    const unit = fd.get('unit');
+    const res = addItem({ name, category, qty, unit });
     if (res.dup) { closeSheet(); revealRow(res.dup.id); toast(MSG.DUPLICATE); return; }
-    closeSheet();
-    toast(`${name} added`);
+    const isStaple = [...S.staples.values()].some(s => nameKey(s.name) === nameKey(name));
+    const saved = fd.get('saveStaple') && !isStaple && upsertStaple({ name, category, qty, unit, status: 'Staple' });
+    if (fromPicker) openPicker(); else closeSheet();
+    toast(saved ? `${name} added and saved to Staples` : `${name} added`);
   }, '#f-name');
   if (prefill) onNameInput();
+}
+
+/* Add items picker (opened by +) */
+function openPicker(query = '') {
+  const body = `
+    <div class="picker">
+      <div class="picker-search"><label for="f-pick" class="sr-only">Search staples</label>
+        <input id="f-pick" type="search" placeholder="Search staples or type a new item" value="${esc(query)}" autocomplete="off" autocapitalize="words" enterkeyhint="done"></div>
+      <div class="picker-list" id="pickerList"></div>
+      <button class="btn primary block big" type="button" data-act="closeSheet">Done</button>
+    </div>`;
+  openSheet('Add items', body, () => {}, null, { tall: true });
+  pickerQuery = query;
+  renderPicker();
+}
+function renderPicker() {
+  const box = $('#pickerList');
+  if (pickerQuery == null || !box) return;
+  const raw = pickerQuery.trim();
+  const q = nameKey(raw);
+  const active = [...S.staples.values()].filter(s => s.status !== 'Inactive');
+  const hits = active.filter(s => !q || nameKey(s.name).includes(q) || nameKey(s.category).includes(q));
+  const exact = active.some(s => nameKey(s.name) === q);
+  const plus = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+  const tick = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  let html = '';
+  if (!exact) {
+    const label = raw ? `Add “${esc(cleanName(raw))}” as new item` : 'New item (not in Staples)';
+    html += `<button type="button" class="picker-new" data-act="pickNew"><span class="pick-ic">${plus}</span><span>${label}</span></button>`;
+  }
+  if (!hits.length) {
+    html += `<div class="empty">${active.length ? `No staples match “${esc(raw)}”.` : 'No staples yet.'}</div>`;
+  }
+  for (const [cat, rows] of groupByCategory(hits)) {
+    html += `<div class="picker-cat">${esc(cat)}</div><ul class="rows picker-group">` + rows.map(st => {
+      const on = activeUnbought(nameKey(st.name));
+      return `<li class="row${on ? ' on' : ''}">
+        <button type="button" class="row-main" data-act="${on ? 'pickRemove' : 'pickAdd'}" data-sid="${esc(st.id)}"
+          aria-label="${on ? esc(st.name) + ' is on the list, tap to remove' : 'Add ' + esc(st.name) + ', ' + esc(qtyLabel(st.qty, st.unit))}">
+          <span class="name">${esc(st.name)}</span>
+          <span class="meta">${on ? 'On list · ' + esc(qtyLabel(on.qty, on.unit)) : esc(qtyLabel(st.qty, st.unit))}</span>
+        </button>
+        <span class="pick-ic${on ? ' on' : ''}" aria-hidden="true">${on ? tick : plus}</span>
+      </li>`;
+    }).join('') + '</ul>';
+  }
+  box.innerHTML = html;
 }
 
 function stapleMatches(text) {
@@ -974,6 +1034,7 @@ function onNameInput() {
   list.innerHTML = matches.map(s => `<li><button type="button" data-act="pickStaple" data-sid="${esc(s.id)}">
     <span>${esc(s.name)}</span><small>${esc(qtyLabel(s.qty, s.unit))} · ${esc(s.category)}</small></button></li>`).join('');
   if (exact) fillFromStaple(exact, false);
+  const sw = $('#saveStapleRow'); if (sw) sw.hidden = !!exact;
   const dup = activeUnbought(nameKey(text));
   $('#dupMsg').innerHTML = dup ? `<div class="warn-msg"><span>${esc(MSG.DUPLICATE)}</span>
     <button class="btn" type="button" data-act="showDup" data-id="${esc(dup.id)}">Show it</button></div>` : '';
@@ -1142,6 +1203,10 @@ document.addEventListener('click', e => {
     case 'openMenu': openMenu(); break;
     case 'closeMenu': closeMenu(); break;
     case 'openAdd': openAddSheet(el.dataset.name || ''); break;
+    case 'openPicker': openPicker(); break;
+    case 'pickNew': openAddSheet(cleanName(pickerQuery || ''), { fromPicker: true }); break;
+    case 'pickAdd': if (st) { addStapleToList(st); renderPicker(); } break;
+    case 'pickRemove': if (st) { const r = activeUnbought(nameKey(st.name)); if (r) { removeItem(r); renderPicker(); } } break;
     case 'closeSheet': closeSheet(); break;
     case 'edit': if (row) openEditSheet(row); break;
     case 'editCart': if (row) openCartSheet(row); break;
@@ -1185,6 +1250,7 @@ document.addEventListener('input', e => {
   if (e.target.id === 'f-name' && $('#suggestions')) onNameInput();
   else if (e.target.id === 'stapleSearch') { S.stapleQuery = e.target.value; renderStaples(); }
   else if (e.target.id === 'f-stq') renderManageList(e.target.value);
+  else if (e.target.id === 'f-pick') { pickerQuery = e.target.value; renderPicker(); }
 });
 document.addEventListener('change', e => {
   if (e.target.name === 'theme') { setTheme(e.target.value); }
