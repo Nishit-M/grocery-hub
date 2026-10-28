@@ -3,7 +3,7 @@
 // 2. After ANY change to the app files, raise APP_VERSION (e.g. 1.0.1) so every phone picks up the update.
 // The apiKey below is not a secret: access is controlled by the Firestore security rules.
 self.GH_CONFIG = {
-  APP_VERSION: '1.0.2',
+  APP_VERSION: '1.0.4',
   firebase: {
     apiKey: 'AIzaSyDNSw37aQZ1_AM2CXkVoje8g0NByTX6SpU',
     authDomain: 'grocery-hub-93ef4.firebaseapp.com',

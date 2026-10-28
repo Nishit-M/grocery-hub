@@ -484,7 +484,7 @@ function showOnly(id) { SCREENS.forEach(s => { $('#' + s).hidden = s !== id; });
 
 function showSignIn() {
   showOnly('screen-signin');
-  $('#tabbar').hidden = true; $('#fab').hidden = true; $('#memberChip').hidden = true;
+  $('#menuBtn').hidden = true; closeMenu(); $('#fab').hidden = true; $('#memberChip').hidden = true;
 }
 function showDenied() {
   stopData();
@@ -492,14 +492,29 @@ function showDenied() {
   S.me = null;
   $('#deniedEmail').textContent = S.user ? S.user.email : '';
   showOnly('screen-denied');
-  $('#tabbar').hidden = true; $('#fab').hidden = true; $('#memberChip').hidden = true;
+  $('#menuBtn').hidden = true; closeMenu(); $('#fab').hidden = true; $('#memberChip').hidden = true;
 }
 function showApp() {
-  $('#tabbar').hidden = false;
+  $('#menuBtn').hidden = false;
   $('#memberChip').hidden = false;
   goto(S.tab, false);
 }
 
+const TAB_TITLES = { list: 'Grocery Hub', staples: 'Staples', history: 'History', settings: 'Settings' };
+function openMenu() {
+  const d = $('#drawer');
+  if (d.open) return;
+  const me = S.me;
+  $('#drawerFoot').textContent = me ? `Signed in as ${me.name || me.email || ''} · v${APP_VERSION}` : `v${APP_VERSION}`;
+  d.showModal();
+  $('#menuBtn').setAttribute('aria-expanded', 'true');
+  const cur = d.querySelector('[aria-current="page"]');
+  if (cur) cur.focus();
+}
+function closeMenu() {
+  const d = $('#drawer');
+  if (d && d.open) d.close();
+}
 function goto(tab, focus = true) {
   if (!['list', 'staples', 'history', 'settings'].includes(tab)) tab = 'list';
   S.tab = tab;
@@ -510,6 +525,9 @@ function goto(tab, focus = true) {
     if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   $('#fab').hidden = !(tab === 'list' && ready);
+  $('#brand').textContent = TAB_TITLES[tab];
+  document.title = tab === 'list' ? 'Grocery Hub' : TAB_TITLES[tab] + ' · Grocery Hub';
+  closeMenu();
   if (tab === 'history') ensureHistory();
   render();
   if (focus) { window.scrollTo(0, 0); $('#main').focus({ preventScroll: true }); }
@@ -582,7 +600,7 @@ function renderList() {
             <span class="name">${esc(r.name)}</span>
             <span class="meta">${esc(qtyLabel(r.qty, r.unit))} · added by ${esc(r.addedBy || '—')}${carried ? ' · carried over' : ''}</span>
           </button>
-          <button type="button" class="icon-btn ok" data-act="buy" data-id="${esc(r.id)}" aria-label="Mark ${esc(r.name)} as bought">✔</button>
+          <button type="button" class="icon-btn ok" data-act="buy" data-id="${esc(r.id)}" aria-label="Mark ${esc(r.name)} as bought"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
         </li>`;
       }).join('');
       html += groupHTML('buy:' + cat, cat, rows.length, inner);
@@ -601,7 +619,7 @@ function renderList() {
           <span class="row-line"><span class="name">${esc(r.name)}</span><span class="price">${missing ? 'Add price' : esc(money(r.price))}</span></span>
           <span class="meta">${esc(qtyLabel(r.qty, r.unit))}${r.store ? ' · ' + esc(r.store) : ''} · by ${esc(r.boughtBy || '—')}</span>
         </button>
-        <button type="button" class="icon-btn" data-act="unbuy" data-id="${esc(r.id)}" aria-label="Move ${esc(r.name)} back to To Buy">↩</button>
+        <button type="button" class="icon-btn" data-act="unbuy" data-id="${esc(r.id)}" aria-label="Move ${esc(r.name)} back to To Buy"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></svg></button>
       </li>`;
     }).join('');
     html += groupHTML('cart', 'Bought', cart.length, inner, `<span class="subtotal">${esc(money(t.cartTotal))}</span>`);
@@ -630,11 +648,11 @@ function renderStaples() {
         <button type="button" class="row-main" data-act="addStaple" data-sid="${esc(s.id)}"
           aria-label="${onList ? esc(s.name) + ' is on the list' : 'Add ' + esc(s.name) + ', ' + esc(qtyLabel(s.qty, s.unit))}">
           <span class="name">${esc(s.name)}</span>
-          <span class="meta">${onList ? `<span class="tag">✔ On list</span> ${esc(qtyLabel(onList.qty, onList.unit))}` : esc(qtyLabel(s.qty, s.unit))}</span>
+          <span class="meta">${onList ? `<span class="tag">On list</span> ${esc(qtyLabel(onList.qty, onList.unit))}` : esc(qtyLabel(s.qty, s.unit))}</span>
         </button>
         ${onList
-          ? `<button type="button" class="icon-btn" data-act="removeStaple" data-sid="${esc(s.id)}" aria-label="Remove ${esc(s.name)} from the list">✖</button>`
-          : `<button type="button" class="icon-btn ok" data-act="addStaple" data-sid="${esc(s.id)}" aria-label="Add ${esc(s.name)} to the list">+</button>`}
+          ? `<button type="button" class="icon-btn" data-act="removeStaple" data-sid="${esc(s.id)}" aria-label="Remove ${esc(s.name)} from the list"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`
+          : `<button type="button" class="icon-btn ok" data-act="addStaple" data-sid="${esc(s.id)}" aria-label="Add ${esc(s.name)} to the list"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>`}
       </li>`;
     }).join('');
     // While searching, every matching group is shown open ("search:" ids are never stored as collapsed).
@@ -886,6 +904,8 @@ $('#sheetForm').addEventListener('submit', e => {
   if (sheetSubmit) sheetSubmit(new FormData(e.target), e.submitter);
 });
 $('#sheet').addEventListener('click', e => { if (e.target === e.currentTarget) closeSheet(); }); // tap on backdrop
+$('#drawer').addEventListener('click', e => { if (e.target === e.currentTarget) closeMenu(); }); // tap outside the menu
+$('#drawer').addEventListener('close', () => { $('#menuBtn').setAttribute('aria-expanded', 'false'); });
 
 const optionList = (list, sel, placeholder) =>
   (placeholder ? `<option value="" ${sel ? '' : 'selected'} disabled>${esc(placeholder)}</option>` : '') +
@@ -1119,6 +1139,8 @@ document.addEventListener('click', e => {
     case 'signout': doSignOut(); break;
     case 'retryMember': if (S.user) watchMember(S.user); break;
     case 'goto': goto(el.dataset.tab); break;
+    case 'openMenu': openMenu(); break;
+    case 'closeMenu': closeMenu(); break;
     case 'openAdd': openAddSheet(el.dataset.name || ''); break;
     case 'closeSheet': closeSheet(); break;
     case 'edit': if (row) openEditSheet(row); break;
