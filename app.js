@@ -527,8 +527,9 @@ function render() {
   if (!S.me) return;
   const ready = S.loaded.items || S.items.size;
   if (ready && !$('#screen-loading').hidden) goto(S.tab, false);
-  $('#memberChip').textContent = '👤 ' + S.me.name;
-  $('#memberChip').setAttribute('aria-label', `Signed in as ${S.me.name}. Open settings`);
+  const initials = S.me.name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?';
+  $('#memberChip').textContent = initials;
+  $('#memberChip').setAttribute('aria-label', `${S.me.name} — Settings`);
   updateStatus();
   if (!ready) return;
   if (S.tab === 'list') renderList();
@@ -568,7 +569,7 @@ function renderList() {
   const toBuy = toBuyRows();
   const cart = cartRows();
   let html = `<div class="section-head"><h2>To Buy</h2>
-    ${toBuy.length ? `<button class="btn" type="button" data-act="share" aria-label="Share the To Buy list">📤 Share</button>` : ''}</div>`;
+    ${toBuy.length ? `<button class="btn" type="button" data-act="share" aria-label="Share the To Buy list">Share</button>` : ''}</div>`;
   if (!toBuy.length) {
     html += `<div class="empty">Nothing to buy. Tap <b>+</b> or add from <b>Staples</b>.</div>`;
   } else {
@@ -633,7 +634,7 @@ function renderStaples() {
         </button>
         ${onList
           ? `<button type="button" class="icon-btn" data-act="removeStaple" data-sid="${esc(s.id)}" aria-label="Remove ${esc(s.name)} from the list">✖</button>`
-          : `<button type="button" class="icon-btn ok" data-act="addStaple" data-sid="${esc(s.id)}" aria-label="Add ${esc(s.name)} to the list">🛒</button>`}
+          : `<button type="button" class="icon-btn ok" data-act="addStaple" data-sid="${esc(s.id)}" aria-label="Add ${esc(s.name)} to the list">+</button>`}
       </li>`;
     }).join('');
     // While searching, every matching group is shown open ("search:" ids are never stored as collapsed).
