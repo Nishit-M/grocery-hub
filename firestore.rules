@@ -1,0 +1,80 @@
+rules_version = '2';
+
+// Grocery Hub security rules.
+// Paste into Firebase console → Firestore Database → Rules → Publish.
+// Only Google accounts listed (and Active) in the "members" collection can read or write.
+// The members collection is filled from the Members tab of the Google Sheet by Code.gs;
+// nobody can change it from the app.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true;
+    }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function memberPath() { return /databases/$(database)/documents/members/$(myEmail()); }
+    function isMember() {
+      return signedIn() && exists(memberPath()) && get(memberPath()).data.active == true;
+    }
+
+    function validItem(d) {
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 100
+        && d.nameKey is string
+        && d.category is string
+        && d.qty is number && d.qty > 0
+        && d.unit is string
+        && d.bought is bool
+        && d.archived is bool
+        && (d.price == null || (d.price is number && d.price >= 0))
+        && d.store is string && d.store.size() <= 60;
+    }
+    function validStaple(d) {
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 100
+        && d.category is string
+        && d.qty is number && d.qty > 0
+        && d.unit is string
+        && d.status in ['Staple', 'Inactive'];
+    }
+
+    // Each person may read their own member record (so the app can say "not on the list").
+    match /members/{email} {
+      allow read: if signedIn() && (email == myEmail() || isMember());
+      allow write: if false;
+    }
+
+    // Staples are never deleted, only set to Inactive.
+    match /staples/{id} {
+      allow read: if isMember();
+      allow create, update: if isMember() && validStaple(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /list/{id} {
+      allow read: if isMember();
+      allow create: if isMember() && validItem(request.resource.data)
+        && request.resource.data.bought == false
+        && request.resource.data.archived == false;
+      allow update: if isMember() && validItem(request.resource.data);
+      // Only unbought rows can be deleted; bought rows are history.
+      allow delete: if isMember() && resource.data.bought == false;
+    }
+
+    // One document per unbought item name. "create" fails if it already exists,
+    // which is what blocks duplicate list rows across phones.
+    match /openKeys/{key} {
+      allow read: if isMember();
+      allow create, delete: if isMember();
+      allow update: if false;
+    }
+
+    match /control/{id} {
+      allow read: if isMember();
+      allow create, update: if isMember()
+        && (!('budget' in request.resource.data) || request.resource.data.budget == null
+            || (request.resource.data.budget is number && request.resource.data.budget >= 0));
+      allow delete: if false;
+    }
+  }
+}

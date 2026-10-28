@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Grocery Hub</title>
+  <meta name="description" content="Shared monthly grocery list for the household.">
+  <meta name="theme-color" content="#1b6e35">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Groceries">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Apply the saved theme before first paint to avoid a flash.
+    try { var t = JSON.parse(localStorage.getItem('gh.theme') || '"system"'); if (t !== 'system') document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="topbar">
+    <h1 class="brand"><span aria-hidden="true">🛒</span> Grocery Hub</h1>
+    <span id="syncDot" class="sync-dot" role="img" aria-label="Sync status"></span>
+    <button id="memberChip" class="member-chip" type="button" data-act="goto" data-tab="settings" hidden></button>
+  </header>
+
+  <div id="banners" class="banners" aria-live="polite"></div>
+
+  <main id="main" tabindex="-1">
+    <!-- First-load skeleton -->
+    <section id="screen-loading" class="screen" aria-label="Loading">
+      <div class="cards">
+        <div class="card skel"></div><div class="card skel"></div>
+        <div class="card skel"></div><div class="card skel"></div>
+      </div>
+      <div class="skel-row"></div><div class="skel-row"></div><div class="skel-row"></div>
+      <div class="skel-row"></div><div class="skel-row"></div>
+      <p class="sr-only">Loading your list…</p>
+    </section>
+
+    <section id="screen-signin" class="screen centered" hidden>
+      <img src="icons/icon-192.png" width="96" height="96" alt="">
+      <h2>Welcome to Grocery Hub</h2>
+      <p class="muted">Sign in with the Google account your household added to the Members list.</p>
+      <button class="btn primary big" type="button" data-act="signin">Sign in with Google</button>
+      <p id="signinError" class="error-text" role="alert"></p>
+    </section>
+
+    <section id="screen-denied" class="screen centered" hidden>
+      <h2>Not on the household list yet</h2>
+      <p>You're signed in as <strong id="deniedEmail"></strong>.</p>
+      <p class="muted">Ask the person who manages the Grocery Hub sheet to add this email to the <b>Members</b> tab and run <b>Grocery Hub → Sync now</b>. Then tap Try again.</p>
+      <div class="btn-row">
+        <button class="btn primary" type="button" data-act="retryMember">Try again</button>
+        <button class="btn" type="button" data-act="signout">Use another account</button>
+      </div>
+    </section>
+
+    <section id="screen-setup" class="screen centered" hidden>
+      <h2>Almost there</h2>
+      <p class="muted">config.js still has the placeholder Firebase settings. Paste your Firebase web-app config into config.js (see README step 5) and upload it again.</p>
+    </section>
+
+    <!-- Tab 1: List -->
+    <section id="tab-list" class="screen" hidden aria-labelledby="h-list">
+      <h2 id="h-list" class="sr-only">Shopping list</h2>
+      <div id="listSummary"></div>
+      <div id="listBody"></div>
+    </section>
+
+    <!-- Tab 2: Staples -->
+    <section id="tab-staples" class="screen" hidden aria-labelledby="h-staples">
+      <h2 id="h-staples" class="sr-only">Staples</h2>
+      <div class="search-wrap">
+        <label for="stapleSearch" class="sr-only">Search staples</label>
+        <input id="stapleSearch" type="search" placeholder="Search staples…" autocomplete="off" enterkeyhint="search">
+      </div>
+      <div id="staplesBody"></div>
+    </section>
+
+    <!-- Tab 3: History -->
+    <section id="tab-history" class="screen" hidden aria-labelledby="h-history">
+      <h2 id="h-history" class="sr-only">History</h2>
+      <div class="field">
+        <label for="historyMonth">Month</label>
+        <select id="historyMonth"></select>
+      </div>
+      <div id="historyBody"></div>
+    </section>
+
+    <!-- Tab 4: Settings -->
+    <section id="tab-settings" class="screen" hidden aria-labelledby="h-settings">
+      <h2 id="h-settings" class="sr-only">Settings</h2>
+      <div id="settingsBody"></div>
+    </section>
+  </main>
+
+  <button id="fab" class="fab" type="button" data-act="openAdd" aria-label="Add item" hidden>
+    <span aria-hidden="true">+</span>
+  </button>
+
+  <nav class="tabbar" aria-label="Main" hidden id="tabbar">
+    <button type="button" data-act="goto" data-tab="list"><span aria-hidden="true" class="ti">📝</span><span>List</span></button>
+    <button type="button" data-act="goto" data-tab="staples"><span aria-hidden="true" class="ti">⭐</span><span>Staples</span></button>
+    <button type="button" data-act="goto" data-tab="history"><span aria-hidden="true" class="ti">📅</span><span>History</span></button>
+    <button type="button" data-act="goto" data-tab="settings"><span aria-hidden="true" class="ti">⚙️</span><span>Settings</span></button>
+  </nav>
+
+  <dialog id="sheet" class="sheet" aria-labelledby="sheetTitle">
+    <form id="sheetForm" novalidate>
+      <div class="sheet-head">
+        <h2 id="sheetTitle"></h2>
+        <button type="button" class="icon-btn" data-act="closeSheet" aria-label="Close">✕</button>
+      </div>
+      <div id="sheetBody"></div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm" class="confirm" aria-labelledby="confirmText">
+    <p id="confirmText"></p>
+    <div class="btn-row end">
+      <button type="button" class="btn" data-act="confirmNo">Cancel</button>
+      <button type="button" class="btn primary" data-act="confirmYes" id="confirmYes">OK</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <noscript><p class="screen">Grocery Hub needs JavaScript turned on.</p></noscript>
+</body>
+</html>
